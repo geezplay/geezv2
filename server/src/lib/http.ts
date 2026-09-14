@@ -38,10 +38,11 @@ export function errorHandler(
       .json({ error: error.message, details: error.details });
   }
 
-  if (error instanceof ZodError) {
+  if (error instanceof ZodError || (error as { name?: string })?.name === "ZodError") {
+    const zodErr = error as ZodError;
     return res.status(400).json({
       error: "Data yang dikirim tidak valid.",
-      details: error.flatten(),
+      details: typeof zodErr.flatten === "function" ? zodErr.flatten() : error,
     });
   }
 

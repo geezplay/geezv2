@@ -46,11 +46,14 @@ export function serializeCatalog(catalog: Catalog) {
     classId: catalog.classId,
     title: catalog.title,
     price: catalog.price,
-    previewSheetId: catalog.previewSheetId,
+    previewSheetId: catalog.previewSheetId ?? catalog.id,
     previewSheetUrl: catalog.previewSheetUrl ?? "",
-    photoCount: catalog.photoCount,
+    photoCount: catalog.photoCount ?? 0,
     published: catalog.published,
-    createdAt: catalog.createdAt.toISOString(),
+    createdAt:
+      catalog.createdAt instanceof Date
+        ? catalog.createdAt.toISOString()
+        : new Date(catalog.createdAt || Date.now()).toISOString(),
   };
 }
 

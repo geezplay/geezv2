@@ -300,8 +300,7 @@ export function createCatalog(input: {
 }): Promise<Catalog> {
   return adminFetch<Catalog>("/api/admin/catalogs", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+    body: input,
   });
 }
 

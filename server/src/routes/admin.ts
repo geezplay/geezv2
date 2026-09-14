@@ -579,13 +579,21 @@ const createCatalogSchema = z.object({
   eventId: z.string().min(1),
   classId: z.string().min(1),
   title: z.string().min(1),
-  price: z.number().int().min(0),
+  price: z.coerce.number().int().min(0),
 });
 
 adminRouter.post(
   "/catalogs",
   asyncHandler(async (req, res) => {
-    const input = createCatalogSchema.parse(req.body);
+    let payload = req.body;
+    if (typeof payload === "string") {
+      try {
+        payload = JSON.parse(payload);
+      } catch {
+        // continue
+      }
+    }
+    const input = createCatalogSchema.parse(payload);
     const event = await prisma.event.findUnique({ where: { id: input.eventId } });
     if (!event) throw new ApiError(404, "Event tidak ditemukan.");
     const raceClass = await prisma.raceClass.findUnique({ where: { id: input.classId } });
