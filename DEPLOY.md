@@ -265,7 +265,11 @@ Jadwalkan via cron (`crontab -e`):
 
 ---
 
-## 13. Menggunakan Traefik (bila sudah terpasang sebagai container Docker)
+## 13. (Opsional) Menggunakan Traefik bila ada
+
+> **Lewati bagian ini** jika Anda tidak memakai Traefik (mis. Traefik sudah
+> dihapus) dan menggunakan **Nginx** sesuai §7–§8. Bagian ini hanya untuk VPS
+> yang menjalankan Traefik sebagai reverse proxy.
 
 Jika VPS sudah menjalankan **Traefik** di port 80/443 (mis. container
 `traefik-traefik-1`), Anda tidak perlu Nginx. App kita tetap jalan via PM2 di
@@ -331,6 +335,11 @@ Lalu ikuti §7 (Nginx) dan §8 (SSL).
 ---
 
 ## 14. Troubleshooting
+- **API `database: down` (health 503)**: jalankan `bash deploy/check-db.sh`. Pastikan PostgreSQL aktif,
+  role `geezplay_user` + database `geezplay` ada, dan `DATABASE_URL` di `server/.env` benar.
+  Setelah mengubah `.env`: `pm2 restart geezplay-api --update-env`.
+- **502 Bad Gateway pada web**: `:3000` tidak mendengarkan. Cek `pm2 status` (harus ada `geezplay-web`).
+  Jalankan `bash deploy/first-deploy.sh` untuk build + start.
 - **Port 80/443 dipakai Traefik**: lihat §13 (pakai Traefik) atau hentikan Traefik bila memakai Nginx.
 - **Nginx gagal start / `bind() to 0.0.0.0:80 failed (98: Address already in use)`**:
   artinya port 80 (atau 443) sudah dipakai proses lain, biasanya Apache2 atau instance Nginx lama. Cek dan hentikan:
