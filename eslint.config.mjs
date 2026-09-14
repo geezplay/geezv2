@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Backend (Express) memiliki toolchain terpisah:
+    "server/**",
+    // Konfigurasi deploy (PM2/Nginx):
+    "ecosystem.config.js",
+    "deploy/**",
   ]),
 ]);
 

@@ -1,0 +1,201 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EventStatus {
+  ready
+  draft
+}
+
+enum PaymentMethod {
+  qris
+  bank_transfer
+  ewallet
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+  expired
+  cancelled
+}
+
+enum AdminRole {
+  owner
+  editor
+  staff
+}
+
+enum EntitlementStatus {
+  active
+  revoked
+}
+
+model Event {
+  id          String     @id
+  slug        String     @unique
+  name        String
+  date        DateTime
+  location    String
+  status      EventStatus @default(draft)
+  description String     @default("")
+  coverUrl    String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  classes  RaceClass[]
+  catalogs Catalog[]
+  photos   Photo[]
+}
+
+model RaceClass {
+  id          String      @id
+  eventId     String
+  name        String
+  status      EventStatus @default(ready)
+  order       Int         @default(1)
+  createdAt   DateTime    @default(now())
+
+  event    Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  catalogs Catalog[]
+  photos   Photo[]
+
+  @@index([eventId])
+}
+
+model Catalog {
+  id             String   @id
+  eventId        String
+  classId        String
+  title          String
+  price          Int
+  previewSheetId String
+  previewSheetUrl String?
+  photoCount     Int      @default(0)
+  published      Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  event      Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  raceClass  RaceClass   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  photos     Photo[]
+  orderItems OrderItem[]
+
+  @@index([eventId])
+  @@index([classId])
+}
+
+model Photo {
+  id             String   @id
+  catalogId      String
+  eventId        String
+  classId        String
+  previewSheetId String
+  previewUrl     String?
+  originalPath   String?
+  sequence       Int
+  bibNumber      String
+  startNumber    String
+  motorNumber    String
+  ocrConfidence  Float
+  variant        String
+  published      Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  catalog     Catalog         @relation(fields: [catalogId], references: [id], onDelete: Cascade)
+  event       Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  raceClass   RaceClass       @relation(fields: [classId], references: [id], onDelete: Cascade)
+  orderItems  OrderItem[]
+  entitlements DownloadEntitlement[]
+
+  @@index([catalogId])
+  @@index([bibNumber])
+  @@index([startNumber])
+  @@index([motorNumber])
+}
+
+model Voucher {
+  code            String   @id
+  description     String   @default("")
+  discountType    String
+  discountValue   Int
+  minTransaction  Int      @default(0)
+  maxUsage        Int      @default(100)
+  used            Int      @default(0)
+  startDate       DateTime
+  endDate         DateTime
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+}
+
+model Order {
+  id            String        @id
+  buyerEmail    String
+  buyerWhatsapp String
+  voucherCode   String?
+  subtotal      Int
+  discount      Int           @default(0)
+  total         Int
+  paymentMethod PaymentMethod
+  paymentStatus PaymentStatus @default(pending)
+  createdAt     DateTime      @default(now())
+  paidAt        DateTime?
+
+  items         OrderItem[]
+  entitlements  DownloadEntitlement[]
+}
+
+model OrderItem {
+  id             String @id
+  orderId        String
+  catalogId      String
+  photoId        String
+  title          String
+  variant        String
+  price          Int
+  previewSheetId String
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  catalog Catalog @relation(fields: [catalogId], references: [id], onDelete: Cascade)
+  photo   Photo   @relation(fields: [photoId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model DownloadEntitlement {
+  id               String            @id
+  orderId          String
+  photoId          String
+  accessStatus     EntitlementStatus @default(active)
+  createdAt        DateTime          @default(now())
+  expiresAt        DateTime?
+  downloadCount    Int               @default(0)
+  lastDownloadedAt DateTime?
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  photo Photo @relation(fields: [photoId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model AdminUser {
+  id           String    @id
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         AdminRole @default(staff)
+  active       Boolean   @default(true)
+  lastLogin    DateTime?
+  createdAt    DateTime  @default(now())
+}
+
+model Setting {
+  key   String @id
+  value String
+}

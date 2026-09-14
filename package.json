@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "api": "npm --prefix server run dev",
+    "api:build": "npm --prefix server run build",
+    "api:start": "npm --prefix server run start",
+    "db:migrate": "npm --prefix server run migrate",
+    "db:seed": "npm --prefix server run seed"
   },
   "dependencies": {
     "next": "16.3.5",
