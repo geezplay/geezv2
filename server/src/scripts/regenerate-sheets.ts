@@ -8,7 +8,7 @@ import { originalsDir, previewsDir, sheetsDir } from "../lib/uploads";
 async function main() {
   const settingRows = await prisma.setting.findMany();
   const watermark =
-    settingRows.find((row) => row.key === "watermarkText")?.value || "PREVIEW";
+    settingRows.find((row: { key: string; value: string }) => row.key === "watermarkText")?.value || "PREVIEW";
 
   const catalogs = await prisma.catalog.findMany({
     where: { previewSheetUrl: { not: null } },

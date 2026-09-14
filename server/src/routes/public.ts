@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import type { Catalog, Photo, Setting } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { ApiError, asyncHandler } from "../lib/http";
 import {
@@ -307,12 +308,12 @@ publicRouter.post(
     const photos = await prisma.photo.findMany({
       where: { id: { in: input.items.map((item) => item.photoId) } },
     });
-    const photoMap = new Map(photos.map((photo) => [photo.id, photo]));
+    const photoMap = new Map<string, Photo>(photos.map((photo) => [photo.id, photo]));
     const catalogIds = [...new Set(input.items.map((item) => item.catalogId))];
     const catalogs = await prisma.catalog.findMany({
       where: { id: { in: catalogIds } },
     });
-    const catalogMap = new Map(catalogs.map((catalog) => [catalog.id, catalog]));
+    const catalogMap = new Map<string, Catalog>(catalogs.map((catalog) => [catalog.id, catalog]));
 
     for (const item of input.items) {
       const photo = photoMap.get(item.photoId);
@@ -384,7 +385,7 @@ publicRouter.get(
 async function grantEntitlements(orderId: string) {
   const items = await prisma.orderItem.findMany({ where: { orderId } });
   await Promise.all(
-    items.map((item) =>
+    items.map((item: { photoId: string }) =>
       prisma.downloadEntitlement.upsert({
         where: { id: `ent-${orderId}-${item.photoId}` },
         update: { accessStatus: "active" },
@@ -435,7 +436,7 @@ publicRouter.get(
     if (order.paymentStatus !== "paid") {
       throw new ApiError(403, "Foto original hanya tersedia setelah pembayaran terverifikasi.");
     }
-    res.json({ order: serializeOrder(order), items: order.items.map((item) => ({
+    res.json({ order: serializeOrder(order), items: order.items.map((item: { id: string; catalogId: string; photoId: string; title: string; variant: string; price: number; previewSheetId: string }) => ({
       id: item.id,
       catalogId: item.catalogId,
       photoId: item.photoId,
