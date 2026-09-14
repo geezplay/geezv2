@@ -322,3 +322,10 @@ export function uploadEventCover(eventId: string, file: File): Promise<RaceEvent
   );
 }
 
+export function generatePreviewSheet(catalogId: string): Promise<Catalog> {
+  return adminFetch<Catalog>(
+    `/api/admin/catalogs/${encodeURIComponent(catalogId)}/generate-sheet`,
+    { method: "POST" },
+  );
+}
+

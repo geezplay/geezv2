@@ -713,6 +713,90 @@ adminRouter.patch(
   }),
 );
 
+adminRouter.post(
+  "/catalogs/:catalogId/generate-sheet",
+  asyncHandler(async (req, res) => {
+    const catalog = await prisma.catalog.findUnique({
+      where: { id: req.params.catalogId },
+    });
+    if (!catalog) throw new ApiError(404, "Katalog tidak ditemukan.");
+
+    const photos = await prisma.photo.findMany({
+      where: { catalogId: catalog.id },
+      orderBy: { sequence: "asc" },
+    });
+
+    if (photos.length === 0) {
+      throw new ApiError(400, "Katalog belum memiliki foto.");
+    }
+
+    const settingRows = await prisma.setting.findMany();
+    const watermark =
+      settingRows.find((row: { key: string; value: string }) => row.key === "watermarkText")?.value || "GEEZPLAY";
+
+    const catalogDir = path.join(originalsDir, catalog.id);
+    const tiles: SheetTile[] = [];
+
+    for (const photo of photos) {
+      // Try to read original from disk
+      let buffer: Buffer | null = null;
+      if (photo.originalPath) {
+        const originalFile = path.join(catalogDir, photo.originalPath);
+        try {
+          buffer = await fs.promises.readFile(originalFile);
+        } catch {
+          buffer = null;
+        }
+      }
+
+      if (!buffer) {
+        // Fallback: try reading the preview
+        const previewFile = photo.previewUrl?.replace("/previews/", "") ?? "";
+        if (previewFile) {
+          try {
+            buffer = await fs.promises.readFile(path.join(previewsDir, previewFile));
+          } catch {
+            continue; // Skip photos we can't read
+          }
+        } else {
+          continue;
+        }
+      }
+
+      if (buffer) {
+        tiles.push({ buffer, label: `Foto ${String(photo.sequence).padStart(2, "0")}` });
+      }
+    }
+
+    if (tiles.length === 0) {
+      throw new ApiError(500, "Tidak ada file foto yang dapat dibaca dari storage.");
+    }
+
+    const sheet = await makePreviewSheet(tiles, watermark);
+    const sheetFile = `${catalog.id}-${Date.now().toString(36)}.webp`;
+    await fs.promises.writeFile(path.join(sheetsDir, sheetFile), sheet);
+
+    // Clean up old sheet file if exists
+    if (catalog.previewSheetUrl) {
+      const oldSheetFile = catalog.previewSheetUrl.replace("/sheets/", "");
+      if (oldSheetFile) {
+        await fs.promises.unlink(path.join(sheetsDir, oldSheetFile)).catch(() => undefined);
+      }
+    }
+
+    const updated = await prisma.catalog.update({
+      where: { id: catalog.id },
+      data: {
+        previewSheetUrl: `/sheets/${sheetFile}`,
+        previewSheetId: `${catalog.id}:${photos.length}`,
+        photoCount: photos.length,
+      },
+    });
+
+    res.json(serializeCatalog(updated));
+  }),
+);
+
 adminRouter.get(
   "/vouchers",
   asyncHandler(async (_req, res) => {

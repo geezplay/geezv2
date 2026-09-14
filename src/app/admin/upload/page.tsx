@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createCatalog,
+  generatePreviewSheet,
   listAdminCatalogs,
   listAdminClasses,
   listAdminEvents,
@@ -259,7 +260,19 @@ export default function AdminUploadPage() {
         }
       }
 
-      notify("Semua foto dalam antrean telah selesai diproses!", "success");
+      // Regenerate the catalog preview sheet after all uploads
+      notify("Membuat Preview Sheet katalog…", "info");
+      try {
+        await generatePreviewSheet(targetCatId);
+        notify("Preview Sheet berhasil dibuat! Semua foto selesai diproses.", "success");
+      } catch (sheetErr) {
+        notify(
+          sheetErr instanceof Error
+            ? `Preview Sheet gagal: ${sheetErr.message}`
+            : "Gagal membuat Preview Sheet.",
+          "error",
+        );
+      }
     } catch (catError) {
       notify(
         catError instanceof Error ? catError.message : "Gagal menyiapkan katalog.",

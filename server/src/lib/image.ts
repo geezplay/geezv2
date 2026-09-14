@@ -54,9 +54,16 @@ export interface SheetTile {
 }
 
 function numberSvg(width: number, height: number, value: number): Buffer {
+  const text = String(value);
+  const fontSize = 52;
+  const pillW = text.length > 2 ? 90 : text.length > 1 ? 72 : 56;
+  const pillH = 56;
+  const x = width - pillW - 10;
+  const y = 10;
   return Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
-      `<text x="${width - 14}" y="62" text-anchor="end" font-family="system-ui, sans-serif" font-size="64" font-weight="900" fill="#ffe200" stroke="#000000" stroke-width="7" paint-order="stroke" opacity="0.96">${value}</text>` +
+      `<rect x="${x}" y="${y}" width="${pillW}" height="${pillH}" rx="12" fill="#000000" fill-opacity="0.65"/>` +
+      `<text x="${x + pillW / 2}" y="${y + 43}" text-anchor="middle" font-family="system-ui, sans-serif" font-size="${fontSize}" font-weight="900" fill="#ffe200" stroke="#000000" stroke-width="3" paint-order="stroke">${value}</text>` +
       `</svg>`,
   );
 }
