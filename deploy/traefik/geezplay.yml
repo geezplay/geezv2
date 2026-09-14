@@ -1,0 +1,50 @@
+# Konfigurasi dinamis Traefik (file provider) untuk GeezPlay.
+#
+# Prasyarat di Traefik (lihat /docker/traefik/docker-compose.yml):
+#   command:
+#     - "--providers.file.directory=/etc/traefik/dynamic"
+#     - "--providers.file.watch=true"
+#   volumes:
+#     - /etc/traefik/dynamic:/etc/traefik/dynamic
+# EntryPoint yang sudah ada: web (80), websecure (443).
+# certResolver yang sudah ada: letsencrypt.
+# (HTTP -> HTTPS sudah di-redirect global oleh flag entrypoints.web.http.redirections.)
+#
+# Cara pakai: jalankan `bash deploy/traefik/install.sh`
+# Script akan mengganti 127.0.0.1 dengan IP gateway Docker (agar Traefik
+# container bisa menjangkau app PM2 di host).
+
+http:
+  routers:
+    geezplay-web:
+      rule: "Host(`geezplay.site`) || Host(`www.geezplay.site`)"
+      entryPoints:
+        - websecure
+      service: geezplay-web
+      tls:
+        certResolver: letsencrypt
+
+    geezplay-api:
+      rule: "Host(`api.geezplay.site`)"
+      entryPoints:
+        - websecure
+      service: geezplay-api
+      middlewares:
+        - geezplay-buffer
+      tls:
+        certResolver: letsencrypt
+
+  middlewares:
+    geezplay-buffer:
+      buffering:
+        maxRequestBodyBytes: 31457280
+
+  services:
+    geezplay-web:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:3000"
+    geezplay-api:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:4000"

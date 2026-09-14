@@ -159,12 +159,31 @@ sudo systemctl reload nginx
 
 ## 8. DNS & SSL
 
-Buat A record di DNS mengarah ke IP VPS:
-- `geezplay.site`
-- `www.geezplay.site`
-- `api.geezplay.site`
+Cek dulu IP publik VPS di server: `curl -4 ifconfig.me`.
 
-Setelah DNS aktif:
+Aturan record (pakai IP VPS yang sama untuk semua):
+- `A @` (apex)      → IP_VPS
+- `A api`           → IP_VPS
+- `CNAME www`       → `geezplay.site`  (boleh tetap CNAME, **tidak perlu** A `www`)
+
+Penting:
+- **Jangan** membuat dua record `A` dengan nama sama tetapi IP berbeda
+  (mis. `@` → 31.97.109.242 **dan** `@` → 2.57.91.91). Edit yang lama, jangan duplikat.
+- Jika panel sudah punya `A @`/`A api` bawaan dari hosting, **edit** nilainya ke IP VPS
+  Anda — jangan menambah yang baru.
+- Isi kolom **Nama** dengan host saja (`@`, `www`, `api`), bukan `www.geezplay.site`.
+- Jika memakai **Cloudflare**, set **DNS only (awan abu-abu)** dulu agar verifikasi
+  Let's Encrypt (HTTP-01) berhasil.
+- Biarkan record `TXT` lain (mis. `google-site-verification`) apa adanya.
+
+Verifikasi propagasi (harus mengembalikan IP VPS):
+```bash
+dig +short geezplay.site
+dig +short www.geezplay.site
+dig +short api.geezplay.site
+```
+
+Setelah DNS aktif (uji: `ping`/`dig` mengarah ke IP VPS), untuk **Nginx**:
 ```bash
 sudo certbot --nginx -d geezplay.site -d www.geezplay.site -d api.geezplay.site
 ```
@@ -172,6 +191,9 @@ Certbot menyunting Nginx otomatis dan mengatur renew. Cek:
 ```bash
 sudo certbot renew --dry-run
 ```
+
+> Untuk **Traefik**, SSL diurus otomatis oleh certResolver `letsencrypt`
+> (lihat §13); Anda tidak perlu menjalankan certbot.
 
 ---
 
@@ -243,7 +265,92 @@ Jadwalkan via cron (`crontab -e`):
 
 ---
 
-## 13. Troubleshooting
+## 13. Menggunakan Traefik (bila sudah terpasang sebagai container Docker)
+
+Jika VPS sudah menjalankan **Traefik** di port 80/443 (mis. container
+`traefik-traefik-1`), Anda tidak perlu Nginx. App kita tetap jalan via PM2 di
+host (`:3000` & `:4000`), dan Traefik meneruskan trafik ke sana.
+
+Traefik di VPS ini memakai **Docker provider** (`--providers.docker=true`) dan
+belum mengaktifkan **file provider**. Jadi langkahnya:
+
+### 13.1 Aktifkan file provider di Traefik
+Edit `/docker/traefik/docker-compose.yml`, pada service `traefik` tambahkan:
+
+```yaml
+    command:
+      # ... flag yang sudah ada ...
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
+
+    volumes:
+      - /letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/traefik/dynamic:/etc/traefik/dynamic
+```
+
+Lalu:
+```bash
+sudo mkdir -p /etc/traefik/dynamic
+docker compose -f /docker/traefik/docker-compose.yml up -d
+```
+
+> EntryPoint (`web`, `websecure`) dan certResolver (`letsencrypt`) sudah ada,
+> jadi kita tinggal memakai file provider. Redirect HTTP→HTTPS juga sudah
+> global di Traefik.
+
+### 13.2 Pasang konfigurasi GeezPlay
+```bash
+cd /var/www/geezplay
+bash deploy/traefik/install.sh
+```
+Script otomatis mendeteksi container Traefik, menghitung **IP gateway Docker**,
+dan menulis `/etc/traefik/dynamic/geezplay.yml` dengan URL
+`http://<gateway>:3000` dan `http://<gateway>:4000`.
+
+### 13.3 Verifikasi
+```bash
+docker logs --tail 40 traefik-traefik-1
+curl -I https://geezplay.site
+curl https://api.geezplay.site/api/health
+```
+
+> Pada opsi ini, **JANGAN** aktifkan Nginx di 80/443 (bentrok). Nginx boleh
+> dimatikan: `sudo systemctl disable --now nginx`.
+
+### Opsi B — pakai Nginx (jika tidak memakai Traefik)
+Hentikan Traefik dulu:
+```bash
+# service systemd
+sudo systemctl disable --now traefik
+# atau container Docker
+docker stop traefik-traefik-1 && docker update --restart=no traefik-traefik-1
+```
+Lalu ikuti §7 (Nginx) dan §8 (SSL).
+
+---
+
+## 14. Troubleshooting
+- **Port 80/443 dipakai Traefik**: lihat §13 (pakai Traefik) atau hentikan Traefik bila memakai Nginx.
+- **Nginx gagal start / `bind() to 0.0.0.0:80 failed (98: Address already in use)`**:
+  artinya port 80 (atau 443) sudah dipakai proses lain, biasanya Apache2 atau instance Nginx lama. Cek dan hentikan:
+  ```bash
+  # lihat pemakai port 80/443
+  sudo ss -ltnp | grep -E ':80|:443'
+  sudo lsof -iTCP:80 -sTCP:LISTEN -n -P 2>/dev/null
+
+  # bila Apache2 yang memakai (umum)
+  sudo systemctl status apache2 --no-pager
+  sudo systemctl disable --now apache2
+
+  # bila ada master nginx nyangkut
+  sudo pkill -f nginx
+
+  # start ulang nginx
+  sudo systemctl start nginx
+  sudo systemctl status nginx --no-pager
+  ```
+  Catatan: `nginx -t` yang sukses hanya memeriksa **sintaks**, bukan ketersediaan port.
 - **502 Bad Gateway**: cek `pm2 status` dan `pm2 logs`.
 - **CORS error**: pastikan `CORS_ORIGIN` di `server/.env` sama persis dengan `https://geezplay.site`.
 - **Gambar tidak muncul**: cek `NEXT_PUBLIC_API_URL` dan rebuild web.
