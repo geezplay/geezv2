@@ -44,7 +44,7 @@ export function DownloadView({ serverOrder }: { serverOrder?: Order }) {
         </div>
       </div>
 
-      <EntitledDownloadList items={order.items} />
+      <EntitledDownloadList items={order.items} orderId={order.id} />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-xl border border-line bg-surface p-4 text-sm text-muted">

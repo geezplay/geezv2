@@ -86,7 +86,9 @@ export function serializeVoucher(voucher: Voucher) {
   };
 }
 
-export function serializeOrderItem(item: OrderItem) {
+export function serializeOrderItem(
+  item: OrderItem & { photo?: { previewUrl?: string | null } | null },
+) {
   return {
     id: item.id,
     catalogId: item.catalogId,
@@ -95,10 +97,13 @@ export function serializeOrderItem(item: OrderItem) {
     variant: item.variant,
     price: item.price,
     previewSheetId: item.previewSheetId,
+    previewUrl: item.photo?.previewUrl ?? null,
   };
 }
 
-export function serializeOrder(order: Order & { items: OrderItem[] }) {
+export function serializeOrder(
+  order: Order & { items: Array<OrderItem & { photo?: { previewUrl?: string | null } | null }> },
+) {
   return {
     id: order.id,
     email: order.buyerEmail,

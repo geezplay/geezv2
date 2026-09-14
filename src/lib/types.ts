@@ -66,6 +66,7 @@ export interface OrderItem {
   variant: string;
   price: number;
   previewSheetId: string;
+  previewUrl?: string | null;
 }
 
 export interface Order {

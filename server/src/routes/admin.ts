@@ -560,9 +560,118 @@ adminRouter.delete(
 
 adminRouter.get(
   "/catalogs",
-  asyncHandler(async (_req, res) => {
-    const catalogs = await prisma.catalog.findMany({ orderBy: { createdAt: "desc" } });
+  asyncHandler(async (req, res) => {
+    const eventId = typeof req.query.eventId === "string" ? req.query.eventId : undefined;
+    const classId = typeof req.query.classId === "string" ? req.query.classId : undefined;
+    const where: Prisma.CatalogWhereInput = {};
+    if (eventId) where.eventId = eventId;
+    if (classId) where.classId = classId;
+
+    const catalogs = await prisma.catalog.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+    });
     res.json(catalogs.map(serializeCatalog));
+  }),
+);
+
+const createCatalogSchema = z.object({
+  eventId: z.string().min(1),
+  classId: z.string().min(1),
+  title: z.string().min(1),
+  price: z.number().int().min(0),
+});
+
+adminRouter.post(
+  "/catalogs",
+  asyncHandler(async (req, res) => {
+    const input = createCatalogSchema.parse(req.body);
+    const event = await prisma.event.findUnique({ where: { id: input.eventId } });
+    if (!event) throw new ApiError(404, "Event tidak ditemukan.");
+    const raceClass = await prisma.raceClass.findUnique({ where: { id: input.classId } });
+    if (!raceClass) throw new ApiError(404, "Kelas balap tidak ditemukan.");
+
+    const catalogId = `${input.classId}-cat-${Date.now().toString(36)}`;
+    const catalogDir = path.join(originalsDir, catalogId);
+    fs.mkdirSync(catalogDir, { recursive: true });
+
+    const catalog = await prisma.catalog.create({
+      data: {
+        id: catalogId,
+        eventId: input.eventId,
+        classId: input.classId,
+        title: input.title.trim(),
+        price: input.price,
+        previewSheetId: `${catalogId}:0`,
+        photoCount: 0,
+        published: true,
+      },
+    });
+    res.status(201).json(serializeCatalog(catalog));
+  }),
+);
+
+adminRouter.post(
+  "/catalogs/:catalogId/photos",
+  photosUpload.single("photo"),
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw new ApiError(400, "Tidak ada file foto yang diunggah.");
+    const catalog = await prisma.catalog.findUnique({
+      where: { id: req.params.catalogId },
+    });
+    if (!catalog) throw new ApiError(404, "Katalog tidak ditemukan.");
+
+    const settingRows = await prisma.setting.findMany();
+    const watermark =
+      settingRows.find((row: { key: string; value: string }) => row.key === "watermarkText")?.value || "GEEZPLAY";
+
+    const catalogDir = path.join(originalsDir, catalog.id);
+    fs.mkdirSync(catalogDir, { recursive: true });
+
+    const existingCount = await prisma.photo.count({
+      where: { catalogId: catalog.id },
+    });
+    const sequence = existingCount + 1;
+    const photoId = `${catalog.id}-foto-${String(sequence).padStart(2, "0")}-${Date.now().toString(36)}`;
+    const ext = (path.extname(req.file.originalname) || ".jpg").toLowerCase();
+    const originalName = `${photoId}${ext}`;
+
+    await fs.promises.writeFile(path.join(catalogDir, originalName), req.file.buffer);
+
+    const preview = await makePreview(req.file.buffer, watermark);
+    const previewFile = `${photoId}.webp`;
+    await fs.promises.writeFile(path.join(previewsDir, previewFile), preview);
+
+    const digits = req.file.originalname.match(/\d+/);
+    const bib = digits
+      ? String(Number(digits[0]) % 1000)
+      : String(1 + Math.floor(Math.random() * 240));
+
+    const photo = await prisma.photo.create({
+      data: {
+        id: photoId,
+        catalogId: catalog.id,
+        eventId: catalog.eventId,
+        classId: catalog.classId,
+        previewSheetId: catalog.previewSheetId ?? catalog.id,
+        previewUrl: `/previews/${previewFile}`,
+        originalPath: originalName,
+        sequence,
+        bibNumber: bib,
+        startNumber: String(100 + Number(bib)),
+        motorNumber: String(1 + Math.floor(Math.random() * 99)),
+        ocrConfidence: digits ? 0.9 : 0.5,
+        variant: req.file.mimetype.replace("image/", "").toUpperCase() || "JPG",
+        published: true,
+      },
+    });
+
+    await prisma.catalog.update({
+      where: { id: catalog.id },
+      data: { photoCount: { increment: 1 } },
+    });
+
+    res.status(201).json(serializePhoto(photo));
   }),
 );
 

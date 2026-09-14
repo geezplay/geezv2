@@ -1,8 +1,11 @@
 import { Router } from "express";
+import fs from "node:fs";
+import path from "node:path";
 import { z } from "zod";
 import type { Catalog, Photo, Setting } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { ApiError, asyncHandler } from "../lib/http";
+import { originalsDir, previewsDir } from "../lib/uploads";
 import {
   serializeCatalog,
   serializeClass,
@@ -363,7 +366,7 @@ publicRouter.post(
         paymentStatus: "pending",
         items: { create: items },
       },
-      include: { items: true },
+      include: { items: { include: { photo: true } } },
     });
 
     res.status(201).json(serializeOrder(order));
@@ -375,7 +378,7 @@ publicRouter.get(
   asyncHandler(async (req, res) => {
     const order = await prisma.order.findUnique({
       where: { id: req.params.orderId },
-      include: { items: true },
+      include: { items: { include: { photo: true } } },
     });
     if (!order) throw new ApiError(404, "Pesanan tidak ditemukan.");
     res.json(serializeOrder(order));
@@ -406,7 +409,7 @@ publicRouter.post(
     const order = await prisma.order.update({
       where: { id: req.params.orderId },
       data: { paymentStatus: "paid", paidAt: new Date() },
-      include: { items: true },
+      include: { items: { include: { photo: true } } },
     });
     await grantEntitlements(order.id);
     res.json(serializeOrder(order));
@@ -419,7 +422,7 @@ publicRouter.post(
     const order = await prisma.order.update({
       where: { id: req.params.orderId },
       data: { paymentStatus: "cancelled" },
-      include: { items: true },
+      include: { items: { include: { photo: true } } },
     });
     res.json(serializeOrder(order));
   }),
@@ -430,20 +433,68 @@ publicRouter.get(
   asyncHandler(async (req, res) => {
     const order = await prisma.order.findUnique({
       where: { id: req.params.orderId },
-      include: { items: true },
+      include: { items: { include: { photo: true } } },
     });
     if (!order) throw new ApiError(404, "Pesanan tidak ditemukan.");
     if (order.paymentStatus !== "paid") {
       throw new ApiError(403, "Foto original hanya tersedia setelah pembayaran terverifikasi.");
     }
-    res.json({ order: serializeOrder(order), items: order.items.map((item: { id: string; catalogId: string; photoId: string; title: string; variant: string; price: number; previewSheetId: string }) => ({
-      id: item.id,
-      catalogId: item.catalogId,
-      photoId: item.photoId,
-      title: item.title,
-      variant: item.variant,
-      price: item.price,
-      previewSheetId: item.previewSheetId,
-    })) });
+    res.json({
+      order: serializeOrder(order),
+      items: order.items.map((item) => ({
+        id: item.id,
+        catalogId: item.catalogId,
+        photoId: item.photoId,
+        title: item.title,
+        variant: item.variant,
+        price: item.price,
+        previewSheetId: item.previewSheetId,
+        previewUrl: item.photo?.previewUrl ?? null,
+      })),
+    });
+  }),
+);
+
+publicRouter.get(
+  "/orders/:orderId/download/:photoId",
+  asyncHandler(async (req, res) => {
+    const { orderId, photoId } = req.params;
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: { include: { photo: true } } },
+    });
+    if (!order) throw new ApiError(404, "Pesanan tidak ditemukan.");
+    if (order.paymentStatus !== "paid") {
+      throw new ApiError(403, "Foto original hanya dapat diunduh setelah pembayaran lunas.");
+    }
+
+    const item = order.items.find(
+      (i) => i.photoId === photoId || i.id === photoId,
+    );
+    if (!item || !item.photo) {
+      throw new ApiError(404, "Foto tidak ditemukan dalam pesanan ini.");
+    }
+
+    const photo = item.photo;
+    const downloadFileName = `GeezPlay-${order.id}-${photo.bibNumber ? `bib${photo.bibNumber}-` : ""}${photo.id}.jpg`;
+
+    // 1. Check original photo on disk
+    if (photo.originalPath) {
+      const catalogDir = path.join(originalsDir, photo.catalogId);
+      const originalFile = path.join(catalogDir, photo.originalPath);
+      if (fs.existsSync(originalFile)) {
+        return res.download(originalFile, downloadFileName);
+      }
+    }
+
+    // 2. Fallback: check if preview file exists
+    if (photo.previewUrl) {
+      const previewFile = path.join(previewsDir, path.basename(photo.previewUrl));
+      if (fs.existsSync(previewFile)) {
+        return res.download(previewFile, downloadFileName);
+      }
+    }
+
+    throw new ApiError(404, "Berkas foto original belum tersimpan di server.");
   }),
 );

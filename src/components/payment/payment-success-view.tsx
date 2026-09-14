@@ -81,7 +81,7 @@ export function PaymentSuccessView({
             Halaman unduhan
           </ButtonLink>
         </div>
-        <EntitledDownloadList items={order.items} />
+        <EntitledDownloadList items={order.items} orderId={order.id} />
       </section>
 
       <section className="rounded-xl border border-line bg-surface p-4">

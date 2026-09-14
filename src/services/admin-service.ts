@@ -221,8 +221,15 @@ export function deleteClass(id: string): Promise<{ ok: boolean }> {
   });
 }
 
-export function listAdminCatalogs(): Promise<Catalog[]> {
-  return adminFetch<Catalog[]>("/api/admin/catalogs");
+export function listAdminCatalogs(params?: {
+  eventId?: string;
+  classId?: string;
+}): Promise<Catalog[]> {
+  const query = buildQuery({
+    eventId: params?.eventId,
+    classId: params?.classId,
+  });
+  return adminFetch<Catalog[]>(`/api/admin/catalogs${query}`);
 }
 
 export function updateCatalog(id: string, published: boolean): Promise<Catalog> {
@@ -285,6 +292,28 @@ export function uploadCatalog(input: {
   return adminFetch<Catalog>("/api/admin/upload", { method: "POST", body: form });
 }
 
+export function createCatalog(input: {
+  eventId: string;
+  classId: string;
+  title: string;
+  price: number;
+}): Promise<Catalog> {
+  return adminFetch<Catalog>("/api/admin/catalogs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function uploadSinglePhoto(catalogId: string, file: File): Promise<CatalogPhoto> {
+  const form = new FormData();
+  form.append("photo", file);
+  return adminFetch<CatalogPhoto>(
+    `/api/admin/catalogs/${encodeURIComponent(catalogId)}/photos`,
+    { method: "POST", body: form },
+  );
+}
+
 export function uploadEventCover(eventId: string, file: File): Promise<RaceEvent> {
   const form = new FormData();
   form.append("cover", file);
@@ -293,3 +322,4 @@ export function uploadEventCover(eventId: string, file: File): Promise<RaceEvent
     { method: "POST", body: form },
   );
 }
+

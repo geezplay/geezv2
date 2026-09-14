@@ -6,40 +6,47 @@ import { PhotoPlaceholder } from "@/components/ui/photo-placeholder";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/context/toast-context";
 import { IconCheck, IconDownload, IconShield } from "@/components/ui/icons";
+import { assetUrl, publicApiBaseUrl } from "@/lib/api";
 
-function buildOriginalSvg(item: OrderItem): string {
-  const escaped = item.title.replace(/[<>&]/g, "");
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="1200" height="800">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#0f172a"/>
-      <stop offset="100%" stop-color="#16a34a"/>
-    </linearGradient>
-  </defs>
-  <rect width="1200" height="800" fill="url(#g)"/>
-  <text x="60" y="700" fill="#ffffff" font-family="sans-serif" font-size="42" font-weight="700">GEEZPLAY ORIGINAL</text>
-  <text x="60" y="750" fill="#d1fae5" font-family="sans-serif" font-size="26">${escaped}</text>
-</svg>`;
-}
-
-export function EntitledDownloadList({ items }: { items: OrderItem[] }) {
+export function EntitledDownloadList({
+  items,
+  orderId,
+}: {
+  items: OrderItem[];
+  orderId?: string;
+}) {
   const { notify } = useToast();
   const [downloaded, setDownloaded] = useState<string[]>([]);
 
   const handleDownload = (item: OrderItem) => {
-    const blob = new Blob([buildOriginalSvg(item)], { type: "image/svg+xml" });
-    const url = URL.createObjectURL(blob);
+    // Determine orderId from prop or path
+    const resolvedOrderId =
+      orderId ||
+      (typeof window !== "undefined"
+        ? window.location.pathname.split("/").filter(Boolean).pop()
+        : "");
+
+    if (!resolvedOrderId) {
+      notify("ID pesanan tidak ditemukan.", "error");
+      return;
+    }
+
+    const downloadUrl = `${publicApiBaseUrl()}/api/orders/${encodeURIComponent(
+      resolvedOrderId,
+    )}/download/${encodeURIComponent(item.photoId)}`;
+
+    // Create a temporary hidden anchor to trigger download from backend
     const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${item.photoId}-original.svg`;
+    anchor.href = downloadUrl;
+    anchor.download = `GeezPlay-${resolvedOrderId}-${item.photoId}.jpg`;
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
+
     setDownloaded((current) =>
       current.includes(item.id) ? current : [...current, item.id],
     );
-    notify("Tautan unduhan aman dibuat. Berlaku 15 menit.", "success");
+    notify("Mengunduh berkas foto original…", "success");
   };
 
   return (
@@ -47,18 +54,30 @@ export function EntitledDownloadList({ items }: { items: OrderItem[] }) {
       <ul className="space-y-3">
         {items.map((item) => {
           const isDownloaded = downloaded.includes(item.id);
+          const previewSrc = item.previewUrl ? assetUrl(item.previewUrl) : null;
+
           return (
             <li
               key={item.id}
-              className="flex items-center gap-3 rounded-xl border border-line bg-white p-3"
+              className="flex items-center gap-3 rounded-xl border border-line bg-white p-3 shadow-xs"
             >
-              <span className="relative block h-16 w-20 shrink-0 overflow-hidden rounded-lg">
-                <PhotoPlaceholder
-                  seed={item.photoId}
-                  alt={`Foto ${item.title}`}
-                  className="h-full w-full"
-                />
+              <span className="relative block h-16 w-20 shrink-0 overflow-hidden rounded-lg bg-surface">
+                {previewSrc ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={previewSrc}
+                    alt={`Foto ${item.title}`}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <PhotoPlaceholder
+                    seed={item.photoId}
+                    alt={`Foto ${item.title}`}
+                    className="h-full w-full"
+                  />
+                )}
               </span>
+
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-bold text-ink">{item.title}</p>
                 <p className="text-xs text-muted">{item.variant}</p>
@@ -69,6 +88,7 @@ export function EntitledDownloadList({ items }: { items: OrderItem[] }) {
                   </p>
                 ) : null}
               </div>
+
               <Button
                 size="sm"
                 variant={isDownloaded ? "secondary" : "primary"}
@@ -82,11 +102,13 @@ export function EntitledDownloadList({ items }: { items: OrderItem[] }) {
           );
         })}
       </ul>
+
       <p className="flex items-start gap-2 rounded-lg border border-line bg-surface p-3 text-xs text-muted">
-        <IconShield size={16} />
-        Demo frontend: tombol unduh menghasilkan berkas contoh. Di produksi, tombol ini
-        meminta signed URL ke backend yang memverifikasi order, status Paid, dan
-        entitlement sebelum mengirim foto original.
+        <IconShield size={16} className="mt-0.5 shrink-0 text-primary" />
+        <span>
+          Unduhan resmi GeezPlay: Foto beresolusi penuh tanpa watermark. Tautan ini diverifikasi
+          langsung oleh status pembayaran pesanan kamu.
+        </span>
       </p>
     </div>
   );
